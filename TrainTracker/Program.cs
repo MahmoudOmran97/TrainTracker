@@ -29,6 +29,26 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    db.Database.ExecuteSqlRaw("""
+        IF COL_LENGTH('dbo.TrainStops', 'DayOffset') IS NULL
+            ALTER TABLE dbo.TrainStops
+                ADD DayOffset int NOT NULL CONSTRAINT DF_TrainStops_DayOffset DEFAULT 0;
+
+        IF OBJECT_ID('dbo.StationAliases', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.StationAliases
+            (
+                Id        int IDENTITY(1,1) NOT NULL,
+                Alias     nvarchar(200) NOT NULL,
+                AliasKey  nvarchar(200) NOT NULL,
+                StationId int NOT NULL,
+                CONSTRAINT PK_StationAliases PRIMARY KEY (Id),
+                CONSTRAINT FK_StationAliases_Stations_StationId
+                    FOREIGN KEY (StationId) REFERENCES dbo.Stations (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IX_StationAliases_AliasKey ON dbo.StationAliases (AliasKey);
+        END
+        """);
 }
 
 if (app.Environment.IsDevelopment())
