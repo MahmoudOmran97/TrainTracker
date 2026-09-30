@@ -14,11 +14,10 @@ public class StationImporter(HttpClient http, AppDbContext db)
     private const string OverpassUrl = "https://overpass-api.de/api/interpreter";
 
     private const string Query = """
-        [out:json][timeout:120];
-        area["ISO3166-1"="EG"][admin_level=2]->.eg;
-        nwr["railway"="station"](area.eg);
-        out center tags;
-        """;
+    [out:json][timeout:90][bbox:22,24.6,31.8,37];
+    nwr["railway"~"^(station|halt)$"];
+    out center tags;
+    """;
 
     private static readonly HashSet<string> IgnoredStationTypes = new() { "subway", "light_rail", "tram" };
 

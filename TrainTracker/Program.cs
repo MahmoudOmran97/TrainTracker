@@ -13,7 +13,8 @@ builder.Services.AddScoped<ScheduleImporter>();
 builder.Services.AddHttpClient<StationImporter>(c =>
 {
     c.Timeout = TimeSpan.FromMinutes(3);
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("TrainTrackerApp/1.0 (contact: you@example.com)");
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("TrainTrackerApp/1.0 (+https://github.com/MahmoudOmran97/TrainTracker)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("*/*");
 });
 
 builder.Services.AddEndpointsApiExplorer();
