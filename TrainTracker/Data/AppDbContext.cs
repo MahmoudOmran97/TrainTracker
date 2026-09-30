@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<UserTrip> UserTrips => Set<UserTrip>();
+    public DbSet<StationAlias> StationAliases => Set<StationAlias>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -24,6 +25,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.ExternalId).HasMaxLength(50);
             e.HasIndex(x => x.ExternalId).IsUnique().HasFilter("[ExternalId] IS NOT NULL");
             e.HasIndex(x => x.NameAr);
+        });
+
+        b.Entity<StationAlias>(e =>
+        {
+            e.Property(x => x.Alias).HasMaxLength(200).IsRequired();
+            e.Property(x => x.AliasKey).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => x.AliasKey).IsUnique();
+            e.HasOne(x => x.Station).WithMany().HasForeignKey(x => x.StationId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Train>(e =>

@@ -1,0 +1,164 @@
+{
+  "trains": [
+    {
+      "number": "1",
+      "type": "روسي",
+      "stops": [
+        {
+          "station": "القاهرة",
+          "departure": "03:00",
+          "distanceKm": 0
+        },
+        {
+          "station": "شبرا الخيمة",
+          "arrival": "03:15",
+          "departure": "03:15"
+        },
+        {
+          "station": "بنها",
+          "arrival": "03:48",
+          "departure": "03:48"
+        },
+        {
+          "station": "قويسنا",
+          "arrival": "04:01",
+          "departure": "04:01"
+        },
+        {
+          "station": "بركة السبع",
+          "arrival": "04:13",
+          "departure": "04:13"
+        },
+        {
+          "station": "طنطا",
+          "arrival": "04:35",
+          "departure": "04:35"
+        },
+        {
+          "station": "كفر الزيات",
+          "arrival": "04:53",
+          "departure": "04:53"
+        },
+        {
+          "station": "التوفيقية",
+          "arrival": "05:04",
+          "departure": "05:04"
+        },
+        {
+          "station": "ايتاي البارود",
+          "arrival": "05:17",
+          "departure": "05:17"
+        },
+        {
+          "station": "دمنهور",
+          "arrival": "05:42",
+          "departure": "05:42"
+        },
+        {
+          "station": "ابو حمص",
+          "arrival": "05:58",
+          "departure": "05:58"
+        },
+        {
+          "station": "كفر الدوار",
+          "arrival": "06:14",
+          "departure": "06:14"
+        },
+        {
+          "station": "سيدي جابر",
+          "arrival": "06:38",
+          "departure": "06:38"
+        },
+        {
+          "station": "الاسكندرية",
+          "arrival": "06:45"
+        }
+      ]
+    },
+    {
+      "number": "988",
+      "type": "مكيف روسي",
+      "stops": [
+        {
+          "station": "القاهرة",
+          "departure": "19:10",
+          "distanceKm": 0
+        },
+        {
+          "station": "صعيد مصر",
+          "arrival": "19:24",
+          "departure": "19:24"
+        },
+        {
+          "station": "الجيزة",
+          "arrival": "19:35",
+          "departure": "19:35"
+        },
+        {
+          "station": "بني سويف",
+          "arrival": "20:54",
+          "departure": "20:54"
+        },
+        {
+          "station": "المنيا",
+          "arrival": "22:25",
+          "departure": "22:25"
+        },
+        {
+          "station": "اسيوط",
+          "arrival": "00:05",
+          "departure": "00:15"
+        },
+        {
+          "station": "سوهاج",
+          "arrival": "01:40",
+          "departure": "01:40"
+        },
+        {
+          "station": "جرجا",
+          "arrival": "02:05",
+          "departure": "02:05"
+        },
+        {
+          "station": "نجع حمادي",
+          "arrival": "03:00",
+          "departure": "03:00"
+        },
+        {
+          "station": "قنا",
+          "arrival": "03:50",
+          "departure": "03:50"
+        },
+        {
+          "station": "الاقصر",
+          "arrival": "04:50",
+          "departure": "04:50"
+        },
+        {
+          "station": "اسنا",
+          "arrival": "05:32",
+          "departure": "05:32"
+        },
+        {
+          "station": "ادفو",
+          "arrival": "06:16",
+          "departure": "06:16"
+        },
+        {
+          "station": "كوم امبو",
+          "arrival": "07:05",
+          "departure": "07:05"
+        },
+        {
+          "station": "دراو",
+          "arrival": "07:18",
+          "departure": "07:18"
+        },
+        {
+          "station": "اسوان",
+          "arrival": "07:49"
+        }
+      ]
+    }
+  ]
+}

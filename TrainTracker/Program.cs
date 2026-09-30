@@ -132,7 +132,7 @@ app.MapGet("/api/trains/{number}", async (string number, AppDbContext db, Cancel
 
     var stops = train.Stops.OrderBy(s => s.Order)
         .Select(s => new TripStopDto(s.Station.Id, s.Station.NameAr, s.Station.Latitude, s.Station.Longitude,
-            s.Order, s.ScheduledArrival, s.ScheduledDeparture));
+            s.Order, s.ScheduledArrival, s.ScheduledDeparture, s.DayOffset));
 
     return Results.Ok(new TrainDetailsDto(train.Id, train.Number, train.Type, stops));
 });
@@ -146,7 +146,7 @@ app.MapGet("/api/trips/{id:int}", async (int id, AppDbContext db) =>
 
     var stops = t.Train.Stops.OrderBy(s => s.Order)
         .Select(s => new TripStopDto(s.Station.Id, s.Station.NameAr, s.Station.Latitude, s.Station.Longitude,
-            s.Order, s.ScheduledArrival, s.ScheduledDeparture));
+            s.Order, s.ScheduledArrival, s.ScheduledDeparture, s.DayOffset));
 
     return Results.Ok(new TripDetailsDto(t.Id, t.Train.Number, t.Train.Type, t.Status.ToString(),
         t.DelayMinutes, t.LastLatitude, t.LastLongitude, stops));
@@ -191,6 +191,35 @@ if (app.Environment.IsDevelopment())
     // استيراد جداول القطارات من JSON (شوف Samples/sample-schedule.json)
     app.MapPost("/api/admin/import-schedule", async (ScheduleImportDto dto, ScheduleImporter importer, CancellationToken ct) =>
         Results.Ok(await importer.ImportAsync(dto, ct)));
+
+    // أسماء بديلة للمحطات: لو محطة طلعت في unmatchedStations اربطها بمحطة موجودة
+    app.MapGet("/api/admin/aliases", async (AppDbContext db, CancellationToken ct) =>
+        await db.StationAliases.AsNoTracking()
+            .OrderBy(a => a.Alias)
+            .Select(a => new StationAliasDto(a.Id, a.Alias, a.StationId, a.Station.NameAr))
+            .ToListAsync(ct));
+
+    app.MapPost("/api/admin/aliases", async (StationAliasCreateDto dto, AppDbContext db, CancellationToken ct) =>
+    {
+        var alias = dto.Alias?.Trim() ?? "";
+        var key = ArabicText.Normalize(alias);
+        if (key.Length == 0) return Results.BadRequest("الاسم فاضي");
+
+        var station = await db.Stations.FindAsync(new object[] { dto.StationId }, ct);
+        if (station is null) return Results.NotFound("المحطة مش موجودة");
+
+        var existing = await db.StationAliases.FirstOrDefaultAsync(a => a.AliasKey == key, ct);
+        if (existing is null)
+            db.StationAliases.Add(new StationAlias { Alias = alias, AliasKey = key, StationId = station.Id });
+        else
+        {
+            existing.Alias = alias;
+            existing.StationId = station.Id;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new StationAliasDto(existing?.Id ?? 0, alias, station.Id, station.NameAr));
+    });
 }
 
 app.Run();
@@ -203,7 +232,7 @@ public record TripCardDto(int TripId, string TrainNumber, string? TrainType,
     string Status, int DelayMinutes, double? LastLatitude, double? LastLongitude);
 
 public record TripStopDto(int StationId, string StationName, double Latitude, double Longitude,
-    int Order, TimeOnly? ScheduledArrival, TimeOnly? ScheduledDeparture);
+    int Order, TimeOnly? ScheduledArrival, TimeOnly? ScheduledDeparture, int DayOffset = 0);
 
 public record TripDetailsDto(int TripId, string TrainNumber, string? TrainType, string Status,
     int DelayMinutes, double? LastLatitude, double? LastLongitude, IEnumerable<TripStopDto> Stops);
@@ -214,3 +243,7 @@ public record TripSearchResultDto(int TripId, string TrainNumber, string? TrainT
     TimeOnly? Departure, TimeOnly? Arrival, int StopsCount, string Status, int DelayMinutes);
 
 public record TrainDetailsDto(int TrainId, string TrainNumber, string? TrainType, IEnumerable<TripStopDto> Stops);
+
+public record StationAliasDto(int Id, string Alias, int StationId, string StationName);
+
+public record StationAliasCreateDto(string Alias, int StationId);

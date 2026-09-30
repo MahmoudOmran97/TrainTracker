@@ -37,6 +37,12 @@ public class TrainStop
     public double DistanceFromStartKm { get; set; }
     public TimeOnly? ScheduledArrival { get; set; }
     public TimeOnly? ScheduledDeparture { get; set; }
+
+    /// <summary>
+    /// 0 = نفس يوم انطلاق القطر، 1 = اليوم التالي (بعد منتصف الليل)... وهكذا.
+    /// بيخص وقت الوصول (أو المغادرة لو مفيش وصول). يوم المغادرة = DayOffset + 1 لو المغادرة أصغر من الوصول.
+    /// </summary>
+    public int DayOffset { get; set; }
 }
 
 /// <summary>رحلة قطر في يوم معين (ده الكارد اللي في الشاشة الرئيسية)</summary>
@@ -96,4 +102,16 @@ public class UserTrip
     public FollowMode Mode { get; set; }
     public int NotifyMinutesBefore { get; set; } = 15;
     public bool Notified { get; set; }
+}
+
+/// <summary>اسم بديل لمحطة (زي "صعيد مصر") بيتربط بمحطة موجودة عشان الاستيراد يتعرف عليه</summary>
+public class StationAlias
+{
+    public int Id { get; set; }
+    /// <summary>الاسم زي ما هو مكتوب في الجداول</summary>
+    public string Alias { get; set; } = "";
+    /// <summary>الاسم بعد التوحيد (همزات/ياء/تاء مربوطة) — ده اللي بيتطابق عليه الاستيراد</summary>
+    public string AliasKey { get; set; } = "";
+    public int StationId { get; set; }
+    public Station Station { get; set; } = null!;
 }

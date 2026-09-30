@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using TrainTracker.Api.Data;
 using TrainTracker.Api.Models;
@@ -11,7 +10,7 @@ public record ScheduleImportDto(List<TrainImportDto> Trains);
 
 public record TrainImportDto(string Number, string? Type, string? NameAr, List<StopImportDto> Stops);
 
-/// <param name="Station">اسم المحطة بالعربي (بيتطابق مع المحطات الموجودة)</param>
+/// <param name="Station">اسم المحطة بالعربي (بيتطابق مع المحطات الموجودة أو الأسماء البديلة)</param>
 /// <param name="Arrival">وقت الوصول "HH:mm" (فاضي لأول محطة)</param>
 /// <param name="Departure">وقت المغادرة "HH:mm" (فاضي لآخر محطة)</param>
 /// <param name="Latitude">اختياري: لو المحطة مش موجودة وعايز تنشئها</param>
@@ -25,6 +24,7 @@ public record ScheduleImportResult(int TrainsAdded, int TrainsUpdated, int Stati
 /// <summary>
 /// بيستورد جداول القطارات من JSON (من أي مصدر مسموح تستخدمه) ويحفظها في Trains و TrainStops.
 /// القطر بيتحدد برقمه: لو موجود بيتم استبدال محطاته، ولو مش موجود بيتضاف.
+/// بيحسب DayOffset لكل محطة (القطارات اللي بتعدّي منتصف الليل).
 /// </summary>
 public class ScheduleImporter(AppDbContext db)
 {
@@ -32,7 +32,11 @@ public class ScheduleImporter(AppDbContext db)
     {
         var stationsByKey = new Dictionary<string, Station>();
         foreach (var s in await db.Stations.ToListAsync(ct))
-            stationsByKey.TryAdd(Normalize(s.NameAr), s);
+            stationsByKey.TryAdd(ArabicText.Normalize(s.NameAr), s);
+
+        // الأسماء البديلة ليها أولوية (بتتضاف بإيد المستخدم)
+        foreach (var a in await db.StationAliases.Include(x => x.Station).ToListAsync(ct))
+            stationsByKey[a.AliasKey] = a.Station;
 
         int added = 0, updated = 0, stationsCreated = 0;
         var unmatched = new SortedSet<string>();
@@ -51,7 +55,7 @@ public class ScheduleImporter(AppDbContext db)
 
             foreach (var stop in t.Stops)
             {
-                var key = Normalize(stop.Station ?? "");
+                var key = ArabicText.Normalize(stop.Station ?? "");
                 if (key.Length == 0) { missingHere.Add("(اسم فاضي)"); continue; }
 
                 if (stationsByKey.TryGetValue(key, out var st))
@@ -81,7 +85,7 @@ public class ScheduleImporter(AppDbContext db)
                 foreach (var m in missingHere) unmatched.Add(m);
                 problems.Add($"قطر {number}: اتخطى لأن فيه محطات مش موجودة ({missingHere.Count})");
                 // نشيل المحطات الجديدة اللي اتضافت في الـ dictionary للقطر ده بس
-                foreach (var ns in newStations) stationsByKey.Remove(Normalize(ns.NameAr));
+                foreach (var ns in newStations) stationsByKey.Remove(ArabicText.Normalize(ns.NameAr));
                 continue;
             }
 
@@ -108,17 +112,44 @@ public class ScheduleImporter(AppDbContext db)
             train.Type = t.Type?.Trim();
             train.NameAr = t.NameAr?.Trim();
 
-            // 3) المحطات بترتيبها
+            // 3) المحطات بترتيبها + حساب اليوم (DayOffset)
             var order = 1;
+            var dayOffset = 0;
+            int? lastMinutes = null;
+
+            void Advance(TimeOnly time)
+            {
+                var m = time.Hour * 60 + time.Minute;
+                if (lastMinutes is int last && m < last) dayOffset++; // الوقت رجع لورا = عدّينا منتصف الليل
+                lastMinutes = m;
+            }
+
             foreach (var (stop, station) in resolved)
             {
+                var arrival = ParseTime(stop.Arrival);
+                var departure = ParseTime(stop.Departure);
+
+                int stopDay;
+                if (arrival is TimeOnly arr)
+                {
+                    Advance(arr);
+                    stopDay = dayOffset;
+                    if (departure is TimeOnly depAfterArr) Advance(depAfterArr);
+                }
+                else
+                {
+                    if (departure is TimeOnly depOnly) Advance(depOnly);
+                    stopDay = dayOffset;
+                }
+
                 train.Stops.Add(new TrainStop
                 {
                     Station = station,
                     Order = order++,
                     DistanceFromStartKm = stop.DistanceKm ?? 0,
-                    ScheduledArrival = ParseTime(stop.Arrival),
-                    ScheduledDeparture = ParseTime(stop.Departure)
+                    ScheduledArrival = arrival,
+                    ScheduledDeparture = departure,
+                    DayOffset = stopDay
                 });
             }
 
@@ -130,25 +161,4 @@ public class ScheduleImporter(AppDbContext db)
 
     private static TimeOnly? ParseTime(string? s) =>
         !string.IsNullOrWhiteSpace(s) && TimeOnly.TryParse(s.Trim(), CultureInfo.InvariantCulture, out var t) ? t : null;
-
-    /// <summary>توحيد الهمزات والياء والتاء المربوطة والمسافات عشان أسماء المحطات تتطابق</summary>
-    private static string Normalize(string s)
-    {
-        var sb = new StringBuilder(s.Length);
-        foreach (var ch in s.Trim())
-        {
-            switch (ch)
-            {
-                case 'أ': case 'إ': case 'آ': sb.Append('ا'); break;
-                case 'ى': sb.Append('ي'); break;
-                case 'ة': sb.Append('ه'); break;
-                case 'ـ': break; // تطويل
-                default:
-                    if (char.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark) break; // تشكيل
-                    sb.Append(char.ToLowerInvariant(ch));
-                    break;
-            }
-        }
-        return string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    }
 }
