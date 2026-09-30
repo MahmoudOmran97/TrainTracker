@@ -1,0 +1,13 @@
+{
+  "trains": [
+    {
+      "number": "TEST1",
+      "type": "تجريبي",
+      "stops": [
+        { "station": "محطة تجريبية 1", "departure": "08:00", "distanceKm": 0,  "latitude": 30.0, "longitude": 31.0 },
+        { "station": "محطة تجريبية 2", "arrival": "09:00", "departure": "09:05", "distanceKm": 60, "latitude": 29.5, "longitude": 31.2 },
+        { "station": "محطة تجريبية 3", "arrival": "10:10", "distanceKm": 120, "latitude": 29.0, "longitude": 31.1 }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
+builder.Services.AddScoped<ScheduleImporter>();
+
 builder.Services.AddHttpClient<StationImporter>(c =>
 {
     c.Timeout = TimeSpan.FromMinutes(3);
@@ -49,24 +51,17 @@ app.MapGet("/api/stations", async (AppDbContext db, string? q) =>
 });
 
 // ---------------- Trips (كروت الشاشة الرئيسية) ----------------
-app.MapGet("/api/trips/today", async (AppDbContext db) =>
+app.MapGet("/api/trips/today", async (AppDbContext db, CancellationToken ct) =>
 {
-    var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(3)); // توقيت مصر تقريبًا
+    var today = TripGenerator.EgyptToday();
 
     // نولّد رحلات النهارده لو لسه متولدتش
-    var existingTrainIds = await db.Trips.Where(t => t.ServiceDate == today)
-        .Select(t => t.TrainId).ToListAsync();
-    var missing = await db.Trains.Where(t => !existingTrainIds.Contains(t.Id)).ToListAsync();
-    if (missing.Count > 0)
-    {
-        db.Trips.AddRange(missing.Select(t => new Trip { TrainId = t.Id, ServiceDate = today }));
-        await db.SaveChangesAsync();
-    }
+    await TripGenerator.EnsureTripsAsync(db, today, ct);
 
     var trips = await db.Trips.AsNoTracking()
         .Where(t => t.ServiceDate == today)
         .Include(t => t.Train).ThenInclude(tr => tr.Stops).ThenInclude(s => s.Station)
-        .ToListAsync();
+        .ToListAsync(ct);
 
     return trips.Select(t =>
     {
@@ -80,6 +75,66 @@ app.MapGet("/api/trips/today", async (AppDbContext db) =>
             t.Status.ToString(), t.DelayMinutes,
             t.LastLatitude, t.LastLongitude);
     });
+});
+
+// ---------------- بحث عن قطارات بين محطتين (رحلات النهارده) ----------------
+app.MapGet("/api/trips/search", async (AppDbContext db, int fromStationId, int toStationId, CancellationToken ct) =>
+{
+    if (fromStationId == toStationId)
+        return Results.BadRequest("محطة المغادرة والوصول لازم يكونوا مختلفين");
+
+    var today = TripGenerator.EgyptToday();
+    await TripGenerator.EnsureTripsAsync(db, today, ct);
+
+    // القطر لازم يعدّي على المحطتين، ومحطة المغادرة قبل محطة الوصول في الترتيب
+    var rows = await db.TrainStops.AsNoTracking()
+        .Where(a => a.StationId == fromStationId)
+        .Join(db.TrainStops.Where(b => b.StationId == toStationId),
+              a => a.TrainId, b => b.TrainId, (a, b) => new { a, b })
+        .Where(x => x.a.Order < x.b.Order)
+        .Select(x => new
+        {
+            x.a.TrainId,
+            TrainNumber = x.a.Train.Number,
+            TrainType = x.a.Train.Type,
+            Departure = x.a.ScheduledDeparture,
+            Arrival = x.b.ScheduledArrival,
+            StopsCount = x.b.Order - x.a.Order
+        })
+        .ToListAsync(ct);
+
+    var trainIds = rows.Select(r => r.TrainId).ToList();
+    var tripsByTrain = await db.Trips.AsNoTracking()
+        .Where(t => t.ServiceDate == today && trainIds.Contains(t.TrainId))
+        .ToDictionaryAsync(t => t.TrainId, ct);
+
+    var result = rows
+        .Where(r => tripsByTrain.ContainsKey(r.TrainId))
+        .OrderBy(r => r.Departure)
+        .Select(r =>
+        {
+            var trip = tripsByTrain[r.TrainId];
+            return new TripSearchResultDto(trip.Id, r.TrainNumber, r.TrainType,
+                r.Departure, r.Arrival, r.StopsCount, trip.Status.ToString(), trip.DelayMinutes);
+        })
+        .ToList();
+
+    return Results.Ok(result);
+});
+
+// ---------------- تفاصيل قطر برقمه (جدول المحطات) ----------------
+app.MapGet("/api/trains/{number}", async (string number, AppDbContext db, CancellationToken ct) =>
+{
+    var train = await db.Trains.AsNoTracking()
+        .Include(t => t.Stops).ThenInclude(s => s.Station)
+        .FirstOrDefaultAsync(t => t.Number == number, ct);
+    if (train is null) return Results.NotFound();
+
+    var stops = train.Stops.OrderBy(s => s.Order)
+        .Select(s => new TripStopDto(s.Station.Id, s.Station.NameAr, s.Station.Latitude, s.Station.Longitude,
+            s.Order, s.ScheduledArrival, s.ScheduledDeparture));
+
+    return Results.Ok(new TrainDetailsDto(train.Id, train.Number, train.Type, stops));
 });
 
 app.MapGet("/api/trips/{id:int}", async (int id, AppDbContext db) =>
@@ -132,6 +187,10 @@ if (app.Environment.IsDevelopment())
         var (added, updated, skipped) = await importer.ImportAsync(ct);
         return Results.Ok(new { added, updated, skipped });
     });
+
+    // استيراد جداول القطارات من JSON (شوف Samples/sample-schedule.json)
+    app.MapPost("/api/admin/import-schedule", async (ScheduleImportDto dto, ScheduleImporter importer, CancellationToken ct) =>
+        Results.Ok(await importer.ImportAsync(dto, ct)));
 }
 
 app.Run();
@@ -150,3 +209,8 @@ public record TripDetailsDto(int TripId, string TrainNumber, string? TrainType, 
     int DelayMinutes, double? LastLatitude, double? LastLongitude, IEnumerable<TripStopDto> Stops);
 
 public record PositionReportDto(double Latitude, double Longitude, double? SpeedKmh, Guid? UserId);
+
+public record TripSearchResultDto(int TripId, string TrainNumber, string? TrainType,
+    TimeOnly? Departure, TimeOnly? Arrival, int StopsCount, string Status, int DelayMinutes);
+
+public record TrainDetailsDto(int TrainId, string TrainNumber, string? TrainType, IEnumerable<TripStopDto> Stops);
