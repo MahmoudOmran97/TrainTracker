@@ -56,6 +56,7 @@ public class ScheduleImporter(AppDbContext db)
             foreach (var stop in t.Stops)
             {
                 var key = ArabicText.Normalize(stop.Station ?? "");
+                if (key.Length > 0 && key.All(char.IsDigit)) continue; // اسم محطة بالغلط (زي "١")
                 if (key.Length == 0) { missingHere.Add("(اسم فاضي)"); continue; }
 
                 if (stationsByKey.TryGetValue(key, out var st))
@@ -76,7 +77,16 @@ public class ScheduleImporter(AppDbContext db)
                 }
                 else
                 {
-                    missingHere.Add(stop.Station!.Trim());
+                    // مفيش محطة بالاسم ده: ننشئها (الإحداثيات 0,0 لو مش متوفرة، وتتظبط بعدين)
+                    st = new Station
+                    {
+                        NameAr = stop.Station!.Trim(),
+                        Latitude = stop.Latitude ?? 0,
+                        Longitude = stop.Longitude ?? 0
+                    };
+                    stationsByKey[key] = st;
+                    newStations.Add(st);
+                    resolved.Add((stop, st));
                 }
             }
 
